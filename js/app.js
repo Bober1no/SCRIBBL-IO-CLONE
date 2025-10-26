@@ -1,6 +1,6 @@
 
         // WebSocket connection - CHANGE THIS URL TO YOUR BACKEND SERVER
-        const WS_URL = 'wss://dc633ce46d67.ngrok-free.app' // Change to your deployed backend URL
+        const WS_URL = 'wss://aff44ce65eba.ngrok-free.app' // Change to your deployed backend URL
         let ws = null;
         let isConnected = false;
 
@@ -33,9 +33,61 @@
             drawerChoiceTimeLeft: 0
         };
 
-function createEmptyMask(length) {
-    if (!length || length <= 0) return '';
-    return Array(length).fill('_').join(' ');
+const SPACE_PLACEHOLDER = '/';
+const SPACE_DISPLAY_GAP = '   ';
+const HYPHEN_CHARS = new Set(['-', '\u2013', '\u2014']);
+const GUESSABLE_CHAR_REGEX_CLIENT = /[A-Za-z0-9]/;
+
+function buildClientMask(word, revealedIndices, options = {}) {
+    if (!word) return '';
+    const revealAll = !!options.revealAll;
+    const indicesSet = revealedIndices instanceof Set
+        ? revealedIndices
+        : new Set(Array.isArray(revealedIndices) ? revealedIndices : []);
+    const tokens = [];
+    for (let i = 0; i < word.length; i++) {
+        const char = word[i];
+        if (char === ' ') {
+            tokens.push(SPACE_PLACEHOLDER);
+        } else if (HYPHEN_CHARS.has(char)) {
+            tokens.push(char);
+        } else if (!GUESSABLE_CHAR_REGEX_CLIENT.test(char)) {
+            tokens.push(char);
+        } else if (revealAll || indicesSet.has(i)) {
+            tokens.push(char);
+        } else {
+            tokens.push('_');
+        }
+    }
+    return tokens.join(' ');
+}
+
+function maskToDisplayString(mask) {
+    if (Array.isArray(mask)) {
+        return mask.map(token => token === SPACE_PLACEHOLDER ? SPACE_DISPLAY_GAP : token).join(' ');
+    }
+    if (typeof mask !== 'string' || mask.length === 0) {
+        return '';
+    }
+    return mask.split(' ')
+        .map(token => token === SPACE_PLACEHOLDER ? SPACE_DISPLAY_GAP : token)
+        .join(' ');
+}
+
+function getMaskTokenCount(mask) {
+    if (Array.isArray(mask)) return mask.length;
+    if (typeof mask !== 'string' || mask.length === 0) return 0;
+    return mask.split(' ').filter(token => token.length > 0).length;
+}
+
+function createEmptyMask(source) {
+    if (!source) return '';
+    if (typeof source === 'string') {
+        return buildClientMask(source, [], { revealAll: false });
+    }
+    const length = Number(source);
+    if (!Number.isFinite(length) || length <= 0) return '';
+    return Array.from({ length }, () => '_').join(' ');
 }
 
 function clearWordChoiceCountdown() {
@@ -437,29 +489,37 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
         // Word display
         function updateWordDisplay() {
             const display = document.getElementById('wordDisplay');
-            const maskLength = state.currentMask ? state.currentMask.split(' ').length : 0;
-            const wordLength = state.currentWord ? state.currentWord.length : (state.currentWordLength || maskLength);
+            if (!display) return;
+
+            const maskLength = getMaskTokenCount(state.currentMask);
+            const wordLength = state.currentWord && state.currentWord.length
+                ? state.currentWord.length
+                : (state.currentWordLength || maskLength);
 
             if (state.isMyTurn || state.guessedCorrectly) {
                 if (state.currentWord && state.currentWord.length) {
-                    display.textContent = state.currentWord.split('').join(' ');
+                    const revealAllMask = buildClientMask(state.currentWord, [], { revealAll: true });
+                    display.textContent = maskToDisplayString(revealAllMask);
                 } else if (wordLength) {
-                    display.textContent = Array(wordLength).fill('_').join(' ');
+                    display.textContent = maskToDisplayString(createEmptyMask(wordLength));
                 } else {
-                    display.textContent = '_ _ _ _ _';
+                    display.textContent = maskToDisplayString(createEmptyMask(5));
                 }
                 return;
             }
 
             if (state.currentMask && state.currentMask.length) {
-                display.textContent = state.currentMask;
+                display.textContent = maskToDisplayString(state.currentMask);
                 return;
             }
 
             if (wordLength) {
-                display.textContent = Array(wordLength).fill('_').join(' ');
+                const placeholderMask = state.currentWord && state.currentWord.length
+                    ? createEmptyMask(state.currentWord)
+                    : createEmptyMask(wordLength);
+                display.textContent = maskToDisplayString(placeholderMask);
             } else {
-                display.textContent = '_ _ _ _ _';
+                display.textContent = maskToDisplayString(createEmptyMask(5));
             }
         }
 
@@ -865,7 +925,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.currentWordLength = message.wordLength || (state.currentWord ? state.currentWord.length : 0);
                     state.currentMask = (message.mask && message.mask.length)
                         ? message.mask
-                        : (state.currentWordLength ? createEmptyMask(state.currentWordLength) : '');
+                        : (state.currentWordLength ? createEmptyMask(state.currentWord || state.currentWordLength) : '');
                     state.revealedIndices = Array.isArray(message.revealedIndices) ? message.revealedIndices : [];
                     state.wordSelectionDuration = message.wordSelectionDuration || state.wordSelectionDuration || 0;
                     state.wordChoiceTimeLeft = message.wordChoiceTimeLeft ?? (state.gameStarted ? state.wordSelectionDuration : 0);
@@ -1123,7 +1183,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.currentWordLength = message.word.length;
                     state.currentMask = (message.mask && message.mask.length)
                         ? message.mask
-                        : createEmptyMask(state.currentWordLength);
+                        : createEmptyMask(state.currentWord || state.currentWordLength);
                     state.revealedIndices = Array.isArray(message.revealedIndices) ? message.revealedIndices : [];
                     state.hintsGiven = message.hintsGiven || 0;
                     state.guessedCorrectly = state.isMyTurn ? false : state.guessedCorrectly;
@@ -1247,7 +1307,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.currentWordLength = state.currentWord ? state.currentWord.length : 0;
                     state.currentMask = (message.mask && message.mask.length)
                         ? message.mask
-                        : (state.currentWord ? state.currentWord.split('').join(' ') : state.currentMask);
+                        : (state.currentWord ? buildClientMask(state.currentWord, [], { revealAll: true }) : state.currentMask);
                     if (Array.isArray(message.revealedIndices)) {
                         state.revealedIndices = message.revealedIndices;
                         state.hintsGiven = state.revealedIndices.length;
