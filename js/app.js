@@ -1,6 +1,6 @@
 
         // WebSocket connection - CHANGE THIS URL TO YOUR BACKEND SERVER
-        const WS_URL = 'wss://aff44ce65eba.ngrok-free.app' // Change to your deployed backend URL
+        const WS_URL = 'wss://8fff006195ca.ngrok-free.app' // Change to your deployed backend URL
         let ws = null;
         let isConnected = false;
 
