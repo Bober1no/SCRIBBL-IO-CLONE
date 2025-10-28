@@ -212,6 +212,8 @@
             display: block;
             width: 100%;
             max-width: 800px;
+            touch-action: none;
+            -ms-touch-action: none;
         }
 
         .tools {
@@ -645,6 +647,8 @@
     align-items: center;
     gap: 10px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .player-card--interactive {
@@ -681,7 +685,7 @@
 
         .player-name {
             font-weight: bold;
-            color: #333;
+            color: #000000;
         }
 
 .player-score {
@@ -689,15 +693,22 @@
     color: #666;
 }
 
-        .player-card.drawing {
-            border: 2px solid #27ae60;
-            animation: pulse 2s infinite;
-        }
+.player-card.guessed {
+    border-color: #27ae60;
+    background: #47d582;
+    box-shadow: 0 6px 18px rgba(39, 174, 96, 0.35);
+    color: #000000;
+}
 
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.4); }
-            50% { box-shadow: 0 0 0 10px rgba(39, 174, 96, 0); }
-        }
+.player-card.drawing {
+    border: 2px solid #f39c12;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.4); }
+    50% { box-shadow: 0 0 0 10px rgba(243, 156, 18, 0); }
+}
 
         .room-code-display {
             background: #f8f9fa;

@@ -14,7 +14,8 @@
             drawTime: 80,
             timeLeft: 80,
             maxHints: 2,
-            guessedCorrectly: false,
+        guessedCorrectly: false,
+        guessedPlayerIds: new Set(),
             hintsGiven: 0,
             playerName: 'Player1',
             playerId: null,
@@ -34,6 +35,31 @@
         };
 
 const SPACE_PLACEHOLDER = '/';
+function resetGuessedPlayers(guessedPlayers = []) {
+    if (!(state.guessedPlayerIds instanceof Set)) {
+        state.guessedPlayerIds = new Set();
+    } else {
+        state.guessedPlayerIds.clear();
+    }
+
+    if (Array.isArray(guessedPlayers)) {
+        guessedPlayers.forEach(id => state.guessedPlayerIds.add(id));
+    }
+}
+
+function pruneGuessedPlayers() {
+    if (!(state.guessedPlayerIds instanceof Set)) {
+        return;
+    }
+
+    const activeIds = new Set(Array.isArray(state.players) ? state.players.map(player => player.id) : []);
+    Array.from(state.guessedPlayerIds).forEach(id => {
+        if (!activeIds.has(id)) {
+            state.guessedPlayerIds.delete(id);
+        }
+    });
+}
+
 const SPACE_DISPLAY_GAP = '   ';
 const HYPHEN_CHARS = new Set(['-', '\u2013', '\u2014']);
 const GUESSABLE_CHAR_REGEX_CLIENT = /[A-Za-z0-9]/;
@@ -231,10 +257,86 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
         });
 
         // Canvas drawing
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing);
+        const supportsPointerEvents = typeof window !== 'undefined' && window.PointerEvent;
+
+        function handlePointerDown(e) {
+            if (e.pointerType === 'mouse' && e.button !== 0) {
+                return;
+            }
+            if (e.pointerType !== 'mouse') {
+                e.preventDefault();
+            }
+            if (canvas.setPointerCapture && typeof e.pointerId === 'number') {
+                try {
+                    canvas.setPointerCapture(e.pointerId);
+                } catch (err) {
+                    // Ignore capture errors
+                }
+            }
+            startDrawing(e);
+        }
+
+        function handlePointerMove(e) {
+            if (!isMouseDown) return;
+            if (e.pointerType !== 'mouse') {
+                e.preventDefault();
+            }
+            draw(e);
+        }
+
+        function handlePointerUp(e) {
+            if (e.pointerType !== 'mouse') {
+                e.preventDefault();
+            }
+            if (canvas.releasePointerCapture && typeof e.pointerId === 'number') {
+                try {
+                    canvas.releasePointerCapture(e.pointerId);
+                } catch (err) {
+                    // Ignore capture errors
+                }
+            }
+            stopDrawing();
+        }
+
+        function handleTouchStart(e) {
+            if (!state.isMyTurn) return;
+            if (!e.touches || e.touches.length === 0) return;
+            e.preventDefault();
+            startDrawing(e);
+        }
+
+        function handleTouchMove(e) {
+            if (!isMouseDown) return;
+            if (!e.touches || e.touches.length === 0) return;
+            e.preventDefault();
+            draw(e);
+        }
+
+        function handleTouchEnd(e) {
+            if (e && e.touches && e.touches.length > 0) {
+                return;
+            }
+            stopDrawing();
+        }
+
+        if (supportsPointerEvents) {
+            canvas.addEventListener('pointerdown', handlePointerDown);
+            canvas.addEventListener('pointermove', handlePointerMove);
+            canvas.addEventListener('pointerup', handlePointerUp);
+            canvas.addEventListener('pointercancel', handlePointerUp);
+            canvas.addEventListener('pointerout', handlePointerUp);
+            canvas.addEventListener('pointerleave', handlePointerUp);
+        } else {
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+
+            canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+            canvas.addEventListener('touchend', handleTouchEnd);
+            canvas.addEventListener('touchcancel', handleTouchEnd);
+        }
 
         function startDrawing(e) {
             if (!state.isMyTurn) return;
@@ -342,6 +444,101 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             currentStroke = [];
             actionHistory = [];
             setActiveTool('brush');
+            updateUndoState();
+        }
+
+        function processCanvasEvent(event) {
+            if (!event || !event.type) return;
+
+            switch (event.type) {
+                case 'draw': {
+                    if (event.data) {
+                        const segment = cloneSegment(event.data);
+                        drawSegment(segment);
+                        currentStroke.push(segment);
+                    }
+                    break;
+                }
+
+                case 'fill': {
+                    if (event.data) {
+                        performFill(event.data.x, event.data.y, event.data.color || '#000000');
+                    }
+                    break;
+                }
+
+                case 'clear': {
+                    const snapshot = captureSnapshot();
+                    actionHistory.push({ type: 'clear', snapshot });
+                    strokes = [];
+                    currentStroke = [];
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    redrawCanvas();
+                    updateUndoState();
+                    break;
+                }
+
+                case 'stroke-end': {
+                    if (currentStroke.length > 0) {
+                        const finalizedStroke = cloneStroke(currentStroke);
+                        strokes.push(finalizedStroke);
+                        actionHistory.push({ type: 'stroke' });
+                        currentStroke = [];
+                        updateUndoState();
+                    }
+                    break;
+                }
+
+                case 'undo': {
+                    if (actionHistory.length === 0) {
+                        updateUndoState();
+                        break;
+                    }
+
+                    const action = actionHistory.pop();
+
+                    if (!action) {
+                        updateUndoState();
+                        break;
+                    }
+
+                    if (action.type === 'stroke') {
+                        if (strokes.length > 0) {
+                            strokes.pop();
+                        }
+                        redrawCanvas();
+                    } else if (action.type === 'clear') {
+                        restoreSnapshot(action.snapshot);
+                    } else if (action.type === 'fill') {
+                        removeLastFillAction();
+                        redrawCanvas();
+                    }
+
+                    currentStroke = [];
+                    updateUndoState();
+                    break;
+                }
+
+                default:
+                    break;
+            }
+        }
+
+        function applyCanvasHistory(history) {
+            if (!canvas || !ctx) return;
+
+            if (!Array.isArray(history) || history.length === 0) {
+                resetDrawingData();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                redrawCanvas();
+                updateUndoState();
+                return;
+            }
+
+            resetDrawingData();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            history.forEach(event => processCanvasEvent(event));
             updateUndoState();
         }
 
@@ -549,6 +746,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
         }
 
         // Word selection
+        let wordChoiceAnimationFrame = null;
         function showWordChoices(words, timeLeft = null) {
             wordSelectTitle.textContent = 'Choose a word';
             wordSelectSubtitle.textContent = 'Pick one to start drawing.';
@@ -573,12 +771,21 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             state.wordSelectionDuration = normalizedCountdown;
             startWordChoiceCountdown(normalizedCountdown);
 
-            requestAnimationFrame(() => {
+            if (wordChoiceAnimationFrame !== null) {
+                cancelAnimationFrame(wordChoiceAnimationFrame);
+                wordChoiceAnimationFrame = null;
+            }
+            wordChoiceAnimationFrame = requestAnimationFrame(() => {
+                wordChoiceAnimationFrame = null;
                 wordSelectOverlay.classList.add('active');
             });
         }
 
         function hideWordChoices() {
+            if (wordChoiceAnimationFrame !== null) {
+                cancelAnimationFrame(wordChoiceAnimationFrame);
+                wordChoiceAnimationFrame = null;
+            }
             wordSelectOverlay.classList.remove('active');
             wordChoicesContainer.innerHTML = '';
             clearWordChoiceCountdown();
@@ -720,10 +927,15 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             const playersList = document.getElementById('playersList');
             playersList.innerHTML = '';
             hideKickMenu();
+            pruneGuessedPlayers();
+            const guessedPlayers = state.guessedPlayerIds instanceof Set ? state.guessedPlayerIds : null;
             
             state.players.forEach(player => {
                 const card = document.createElement('div');
                 card.className = 'player-card';
+                if (guessedPlayers && guessedPlayers.has(player.id)) {
+                    card.classList.add('guessed');
+                }
                 if (player.id === state.currentDrawer) card.classList.add('drawing');
                 if (state.isHost && player.id !== state.playerId) {
                     card.classList.add('player-card--interactive');
@@ -778,10 +990,15 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             const waitingPlayers = document.getElementById('waitingPlayers');
             waitingPlayers.innerHTML = '<h3 style="color: #667eea; margin-bottom: 10px;">Players:</h3>';
             hideKickMenu();
+            pruneGuessedPlayers();
+            const guessedPlayers = state.guessedPlayerIds instanceof Set ? state.guessedPlayerIds : null;
             
             state.players.forEach(player => {
                 const card = document.createElement('div');
                 card.className = 'player-card';
+                if (guessedPlayers && guessedPlayers.has(player.id)) {
+                    card.classList.add('guessed');
+                }
                 if (state.isHost && player.id !== state.playerId) {
                     card.classList.add('player-card--interactive');
                     card.addEventListener('click', (event) => {
@@ -888,18 +1105,20 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.playerId = message.playerId;
                     state.isHost = true;
                     state.players = message.players;
-                    state.gameStarted = false;
-                    state.currentRound = 0;
-                    state.currentDrawer = null;
-                    state.isMyTurn = false;
-                    state.guessedCorrectly = false;
-                    state.hintsGiven = 0;
+                state.gameStarted = false;
+                state.currentRound = 0;
+                state.currentDrawer = null;
+                state.isMyTurn = false;
+                state.guessedCorrectly = false;
+                resetGuessedPlayers();
+                state.hintsGiven = 0;
                     state.currentWord = '';
                     state.currentWordLength = 0;
                     state.currentMask = '';
                     state.revealedIndices = [];
                     state.wordSelectionDuration = 0;
                     state.wordChoiceTimeLeft = 0;
+                    applyCanvasHistory(message.canvasHistory);
                     document.getElementById('displayRoomCode').textContent = message.roomCode;
                     showScreen('waitingRoomScreen');
                     updateWaitingPlayers();
@@ -918,9 +1137,10 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.maxHints = message.settings.maxHints;
                     state.gameStarted = !!message.gameStarted;
                     state.currentRound = message.currentRound || 0;
-                    state.currentDrawer = message.currentDrawer || null;
-                    state.hintsGiven = message.hintsGiven || 0;
-                    state.guessedCorrectly = Array.isArray(message.guessedPlayers) ? message.guessedPlayers.includes(state.playerId) : false;
+                state.currentDrawer = message.currentDrawer || null;
+                state.hintsGiven = message.hintsGiven || 0;
+                state.guessedCorrectly = Array.isArray(message.guessedPlayers) ? message.guessedPlayers.includes(state.playerId) : false;
+                resetGuessedPlayers(message.guessedPlayers);
                     state.currentWord = message.currentWord || '';
                     state.currentWordLength = message.wordLength || (state.currentWord ? state.currentWord.length : 0);
                     state.currentMask = (message.mask && message.mask.length)
@@ -939,6 +1159,8 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     if (scoreDisplay) {
                         scoreDisplay.textContent = state.myScore;
                     }
+                    const canvasHistory = Array.isArray(message.canvasHistory) ? message.canvasHistory : [];
+                    applyCanvasHistory(canvasHistory);
                     document.getElementById('displayRoomCode').textContent = message.roomCode;
 
                     if (state.gameStarted) {
@@ -1106,6 +1328,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.currentWordLength = 0;
                     state.hintsGiven = 0;
                     state.guessedCorrectly = false;
+                    resetGuessedPlayers();
                     state.isMyTurn = false;
                     state.timeLeft = state.drawTime;
                     state.currentMask = '';
@@ -1146,9 +1369,10 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.currentWord = '';
                     state.currentWordLength = 0;
                     state.hintsGiven = message.hintsGiven || 0;
-                    state.currentMask = (message.mask && message.mask.length) ? message.mask : '';
-                    state.revealedIndices = Array.isArray(message.revealedIndices) ? message.revealedIndices : [];
-                    state.guessedCorrectly = false;
+                state.currentMask = (message.mask && message.mask.length) ? message.mask : '';
+                state.revealedIndices = Array.isArray(message.revealedIndices) ? message.revealedIndices : [];
+                state.guessedCorrectly = false;
+                resetGuessedPlayers();
                     state.timeLeft = state.drawTime;
                     state.wordSelectionDuration = message.wordSelectionDuration || state.wordSelectionDuration || 0;
                     state.wordChoiceTimeLeft = message.wordChoiceTimeLeft ?? state.wordSelectionDuration ?? state.wordChoiceTimeLeft;
@@ -1194,78 +1418,25 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     }
                     break;
 
-                case 'draw': {
-                    if (message.data) {
-                        const segment = cloneSegment(message.data);
-                        drawSegment(segment);
-                        currentStroke.push(segment);
-                    }
-                    break;
-                }
-
-                case 'fill': {
-                    if (message.data) {
-                        performFill(message.data.x, message.data.y, message.data.color || '#000000');
-                    }
-                    break;
-                }
-
-                case 'clear': {
-                    const snapshot = captureSnapshot();
-                    actionHistory.push({ type: 'clear', snapshot });
-                    strokes = [];
-                    currentStroke = [];
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    redrawCanvas();
-                    updateUndoState();
-                    break;
-                }
-
+                case 'draw':
+                case 'fill':
+                case 'clear':
                 case 'stroke-end':
-                    if (currentStroke.length > 0) {
-                        const finalizedStroke = cloneStroke(currentStroke);
-                        strokes.push(finalizedStroke);
-                        actionHistory.push({ type: 'stroke' });
-                        currentStroke = [];
-                        updateUndoState();
-                    }
+                case 'undo':
+                    processCanvasEvent(message);
                     break;
-
-                case 'undo': {
-                    if (actionHistory.length === 0) {
-                        updateUndoState();
-                        break;
-                    }
-
-                    const action = actionHistory.pop();
-
-                    if (!action) {
-                        updateUndoState();
-                        break;
-                    }
-
-                    if (action.type === 'stroke') {
-                        if (strokes.length > 0) {
-                            strokes.pop();
-                        }
-                        redrawCanvas();
-                    } else if (action.type === 'clear') {
-                        restoreSnapshot(action.snapshot);
-                    } else if (action.type === 'fill') {
-                        removeLastFillAction();
-                        redrawCanvas();
-                    }
-
-                    currentStroke = [];
-                    updateUndoState();
-                    break;
-                }
 
                 case 'guess':
                     addMessage(message.message, 'normal', message.playerName);
                     break;
 
                 case 'correct-guess':
+                    if (!(state.guessedPlayerIds instanceof Set)) {
+                        state.guessedPlayerIds = new Set();
+                    }
+                    if (message.playerId) {
+                        state.guessedPlayerIds.add(message.playerId);
+                    }
                     state.players = message.players;
                     updatePlayersList();
                     
@@ -1335,6 +1506,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.revealedIndices = [];
                     state.wordSelectionDuration = 0;
                     state.wordChoiceTimeLeft = 0;
+                    resetGuessedPlayers();
                     state.players = message.players;
                     updatePlayersList();
                     updateWordDisplay();
