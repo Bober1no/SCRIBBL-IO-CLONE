@@ -668,6 +668,14 @@
     box-shadow: 0 6px 18px rgba(102, 110, 233, 0.15);
 }
 
+.player-rank {
+    font-weight: 700;
+    color: #667eea;
+    min-width: 34px;
+    text-align: center;
+    font-size: 16px;
+}
+
         .player-avatar {
             width: 40px;
             height: 40px;

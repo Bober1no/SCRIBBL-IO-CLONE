@@ -922,6 +922,20 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             }
         });
 
+        function getRankedPlayers(players = []) {
+            if (!Array.isArray(players)) {
+                return [];
+            }
+            return [...players].sort((a, b) => {
+                const scoreA = Number.isFinite(a?.score) ? a.score : 0;
+                const scoreB = Number.isFinite(b?.score) ? b.score : 0;
+                if (scoreB !== scoreA) return scoreB - scoreA;
+                const nameCompare = (a?.name || '').localeCompare(b?.name || '', undefined, { sensitivity: 'base' });
+                if (nameCompare !== 0) return nameCompare;
+                return (a?.id || '').localeCompare(b?.id || '');
+            });
+        }
+
         // Players list
         function updatePlayersList() {
             const playersList = document.getElementById('playersList');
@@ -929,8 +943,11 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             hideKickMenu();
             pruneGuessedPlayers();
             const guessedPlayers = state.guessedPlayerIds instanceof Set ? state.guessedPlayerIds : null;
+            const rankedPlayers = getRankedPlayers(state.players);
+            let lastScore = null;
+            let lastRank = 0;
             
-            state.players.forEach(player => {
+            rankedPlayers.forEach((player) => {
                 const card = document.createElement('div');
                 card.className = 'player-card';
                 if (guessedPlayers && guessedPlayers.has(player.id)) {
@@ -953,6 +970,15 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     });
                 }
                 
+                const rank = document.createElement('div');
+                rank.className = 'player-rank';
+                const numericScore = Number.isFinite(player?.score) ? player.score : 0;
+                if (lastScore === null || numericScore < lastScore) {
+                    lastRank += 1;
+                    lastScore = numericScore;
+                }
+                rank.textContent = `#${lastRank}`;
+                
                 const avatar = document.createElement('div');
                 avatar.className = 'player-avatar';
                 avatar.style.backgroundColor = player.color;
@@ -971,6 +997,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                 
                 info.appendChild(name);
                 info.appendChild(score);
+                card.appendChild(rank);
                 card.appendChild(avatar);
                 card.appendChild(info);
                 playersList.appendChild(card);
@@ -992,8 +1019,11 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             hideKickMenu();
             pruneGuessedPlayers();
             const guessedPlayers = state.guessedPlayerIds instanceof Set ? state.guessedPlayerIds : null;
+            const rankedPlayers = getRankedPlayers(state.players);
+            let lastScore = null;
+            let lastRank = 0;
             
-            state.players.forEach(player => {
+            rankedPlayers.forEach((player) => {
                 const card = document.createElement('div');
                 card.className = 'player-card';
                 if (guessedPlayers && guessedPlayers.has(player.id)) {
@@ -1015,6 +1045,15 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     });
                 }
                 
+                const rank = document.createElement('div');
+                rank.className = 'player-rank';
+                const numericScore = Number.isFinite(player?.score) ? player.score : 0;
+                if (lastScore === null || numericScore < lastScore) {
+                    lastRank += 1;
+                    lastScore = numericScore;
+                }
+                rank.textContent = `#${lastRank}`;
+                
                 const avatar = document.createElement('div');
                 avatar.className = 'player-avatar';
                 avatar.style.backgroundColor = player.color;
@@ -1028,6 +1067,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                 name.textContent = player.name + (player.id === state.playerId ? ' (You)' : '');
                 
                 info.appendChild(name);
+                card.appendChild(rank);
                 card.appendChild(avatar);
                 card.appendChild(info);
                 waitingPlayers.appendChild(card);
