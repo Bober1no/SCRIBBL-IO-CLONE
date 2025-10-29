@@ -33,15 +33,10 @@
                     </div>
                 </div>
             </div>
-            <p style="color: #666; margin: 20px 0;">Create a room or join an existing one!</p>
-            <div class="room-controls">
-                <div>
-                    <input type="text" id="roomCodeInput" placeholder="Enter Room Code (e.g., ABC123)">
-                    <button id="joinRoomBtn" class="btn btn-secondary">Join Room</button>
-                </div>
-                <div>
-                    <button id="createRoomBtn" class="btn btn-primary">Create Room</button>
-                </div>
+            <p class="lobby-subtitle">Create a room or join an existing one!</p>
+            <button id="createRoomBtn" class="btn btn-primary lobby-create-btn">Create Room</button>
+            <div class="rooms-list" id="roomsList">
+                <div class="rooms-list-empty">No rooms yet. Be the first to create one!</div>
             </div>
         </div>
 
@@ -50,18 +45,29 @@
             <h1>Room Settings</h1>
             <div class="room-settings">
                 <div class="setting-group">
+                    <label for="roomTitleInput">Room Title:</label>
+                    <input type="text" id="roomTitleInput" placeholder="Enter a room title" maxlength="20">
+                </div>
+
+                <div class="setting-group">
+                    <label for="roomPasswordInput">Room Password (optional):</label>
+                    <input type="text" id="roomPasswordInput" placeholder="Leave blank for no password" maxlength="20">
+                    <small class="input-hint">Spaces only will be treated as no password.</small>
+                </div>
+
+                <div class="setting-group">
                     <label for="numRounds">Number of Rounds:</label>
                     <input type="number" id="numRounds" min="1" max="10" value="3">
                 </div>
                 
                 <div class="setting-group">
                     <label for="drawTime">Draw Time (seconds):</label>
-                    <input type="number" id="drawTime" min="30" max="180" value="80">
+                    <input type="number" id="drawTime" min="30" max="180" value="90">
                 </div>
                 
                 <div class="setting-group">
                     <label for="wordChoiceTime">Word Choice Time (seconds):</label>
-                    <input type="number" id="wordChoiceTime" min="5" max="30" value="10">
+                    <input type="number" id="wordChoiceTime" min="5" max="30" value="15">
                 </div>
                 
                 <div class="setting-group">
@@ -79,9 +85,8 @@
         <div class="lobby-screen" id="waitingRoomScreen">
             <h1>Waiting Room</h1>
             <div class="room-code-display">
-                <h3>Room Code:</h3>
-                <div class="room-code" id="displayRoomCode">------</div>
-                <p style="color: #666; margin-top: 10px;">Share this code with your friends!</p>
+                <h3>Room Password:</h3>
+                <div class="room-code" id="displayRoomPassword">No password</div>
             </div>
             <div id="waitingPlayers" style="max-width: 400px; margin: 20px auto;"></div>
             <div style="margin-top: 30px; display: flex; justify-content: center; gap: 16px;">              <button id="startGameFromWaitingBtn" class="btn btn-primary" style="display: none;">Start Game</button>
@@ -99,7 +104,7 @@
 
             <div class="game-info">
                 <div class="word-display" id="wordDisplay">_ _ _ _ _</div>
-                <div class="timer">Time: <span id="timer">80</span>s</div>
+                <div class="timer">Time: <span id="timer">90</span>s</div>
                 <div class="score">Your Score: <span id="score">0</span></div>
             </div>
 
@@ -115,7 +120,7 @@
                         <div class="drawer-overlay" id="drawerOverlay">
                             <div class="drawer-overlay-card">
                                 <div class="drawer-overlay-title" id="drawerOverlayTitle">The drawer is choosing</div>
-                                <div class="drawer-overlay-timer" id="drawerOverlayTimer">Time left: 10s</div>
+                                <div class="drawer-overlay-timer" id="drawerOverlayTimer">Time left: 15s</div>
                             </div>
                         </div>
                     </div>

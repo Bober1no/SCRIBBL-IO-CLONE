@@ -11,8 +11,8 @@
             myScore: 0,
             round: 1,
             totalRounds: 3,
-            drawTime: 80,
-            timeLeft: 80,
+            drawTime: 90,
+            timeLeft: 90,
             maxHints: 2,
         guessedCorrectly: false,
         guessedPlayerIds: new Set(),
@@ -22,6 +22,7 @@
             playerColor: '#FF6B6B',
             players: [],
             roomCode: null,
+            roomPassword: '',
             isHost: false,
             currentDrawer: null,
             isMyTurn: false,
@@ -31,10 +32,13 @@
             revealedIndices: [],
             wordSelectionDuration: 0,
             wordChoiceTimeLeft: 0,
+            availableRooms: [],
             drawerChoiceTimeLeft: 0
         };
 
 const SPACE_PLACEHOLDER = '/';
+const ROOM_TITLE_MAX_LENGTH = 20;
+const ROOM_PASSWORD_MAX_LENGTH = 20;
 function resetGuessedPlayers(guessedPlayers = []) {
     if (!(state.guessedPlayerIds instanceof Set)) {
         state.guessedPlayerIds = new Set();
@@ -114,6 +118,142 @@ function createEmptyMask(source) {
     const length = Number(source);
     if (!Number.isFinite(length) || length <= 0) return '';
     return Array.from({ length }, () => '_').join(' ');
+}
+
+function normalizeLobbyText(value, maxLength) {
+    if (typeof value !== 'string') return '';
+    const sliced = value.slice(0, maxLength);
+    return sliced.trim();
+}
+
+function buildDefaultRoomTitle(playerName) {
+    const baseName = normalizeLobbyText(playerName || '', ROOM_TITLE_MAX_LENGTH);
+    if (!baseName) {
+        return 'Creative Corner';
+    }
+    let title = `${baseName}'s Room`;
+    if (title.length > ROOM_TITLE_MAX_LENGTH) {
+        title = `${baseName}`.slice(0, ROOM_TITLE_MAX_LENGTH);
+    }
+    const trimmed = title.trim();
+    return trimmed || 'Creative Corner';
+}
+
+function updateRoomPasswordDisplay() {
+    const passwordElement = document.getElementById('displayRoomPassword');
+    if (!passwordElement) return;
+    const displayValue = normalizeLobbyText(state.roomPassword || '', ROOM_PASSWORD_MAX_LENGTH);
+    passwordElement.textContent = displayValue ? `${displayValue}` : 'No password';
+}
+
+function renderAvailableRooms() {
+    const container = document.getElementById('roomsList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const rooms = Array.isArray(state.availableRooms) ? state.availableRooms : [];
+    if (!rooms.length) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'rooms-list-empty';
+        emptyState.textContent = 'No rooms yet. Be the first to create one!';
+        container.appendChild(emptyState);
+        return;
+    }
+
+    rooms.forEach((room) => {
+        const item = document.createElement('div');
+        item.className = 'room-list-item';
+
+        const meta = document.createElement('div');
+        meta.className = 'room-list-meta';
+
+        const title = document.createElement('div');
+        title.className = 'room-list-title';
+        title.textContent = room.title || `Room ${room.code}`;
+
+        const details = document.createElement('div');
+        details.className = 'room-list-details';
+
+        const playersChip = document.createElement('span');
+        playersChip.className = 'room-list-chip';
+        const count = Number.isFinite(room.playerCount) ? room.playerCount : 0;
+        playersChip.textContent = `${count} ${count === 1 ? 'player' : 'players'}`;
+        details.appendChild(playersChip);
+
+        if (room.requiresPassword) {
+            const lockChip = document.createElement('span');
+            lockChip.className = 'room-list-chip room-list-chip--locked';
+            lockChip.textContent = 'Locked';
+            details.appendChild(lockChip);
+        }
+
+        if (room.hostName) {
+            const hostChip = document.createElement('span');
+            hostChip.className = 'room-list-chip';
+            hostChip.textContent = `Host: ${room.hostName}`;
+            details.appendChild(hostChip);
+        }
+
+        meta.appendChild(title);
+        meta.appendChild(details);
+
+        const joinBtn = document.createElement('button');
+        joinBtn.className = 'btn btn-secondary room-list-join';
+        joinBtn.type = 'button';
+        joinBtn.textContent = 'Join';
+        joinBtn.addEventListener('click', () => {
+            attemptJoinRoom(room);
+        });
+
+        item.appendChild(meta);
+        item.appendChild(joinBtn);
+        container.appendChild(item);
+    });
+}
+
+function attemptJoinRoom(room) {
+    if (!room || !room.code) return;
+    const nameInput = document.getElementById('lobbyPlayerName');
+    const playerName = normalizeLobbyText(nameInput ? nameInput.value : '', 15);
+
+    if (!playerName) {
+        alert('Please enter your name!');
+        if (nameInput) {
+            nameInput.focus();
+        }
+        return;
+    }
+
+    if (!isConnected) {
+        alert('Not connected to server. Please wait...');
+        return;
+    }
+
+    let passwordToSend = '';
+    if (room.requiresPassword) {
+        while (true) {
+            const entered = prompt('Enter the room password:');
+            if (entered === null) {
+                return;
+            }
+            const normalized = normalizeLobbyText(entered, ROOM_PASSWORD_MAX_LENGTH);
+            if (!normalized) {
+                alert('Password required for this room.');
+                continue;
+            }
+            passwordToSend = normalized;
+            break;
+        }
+    }
+
+    state.playerName = playerName;
+    sendMessage({
+        type: 'join-room',
+        roomCode: room.code,
+        playerName: playerName,
+        playerColor: state.playerColor,
+        password: passwordToSend
+    });
 }
 
 function clearWordChoiceCountdown() {
@@ -230,7 +370,7 @@ window.addEventListener('resize', hideKickMenu);
 window.addEventListener('scroll', hideKickMenu, { passive: true });
 
         // Colors
-        const colors = ['#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080', '#FFC0CB', '#8B4513'];
+        const colors = ['#000000', '#808080', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080', '#FFC0CB', '#8B4513'];
 
         // Initialize color picker
         const colorPicker = document.getElementById('colorPicker');
@@ -1139,12 +1279,26 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             console.log('Received:', message);
 
             switch (message.type) {
+                case 'room-list':
+                    state.availableRooms = Array.isArray(message.rooms)
+                        ? message.rooms.map((room) => ({
+                            code: room.code,
+                            title: normalizeLobbyText(room.title || '', ROOM_TITLE_MAX_LENGTH) || `Room ${room.code}`,
+                            playerCount: Number.isFinite(room.playerCount) ? room.playerCount : 0,
+                            requiresPassword: !!room.requiresPassword,
+                            hostName: normalizeLobbyText(room.hostName || '', ROOM_TITLE_MAX_LENGTH)
+                        }))
+                        : [];
+                    renderAvailableRooms();
+                    break;
+
                 case 'room-created':
                     clearWordChoiceCountdown();
                     state.roomCode = message.roomCode;
                     state.playerId = message.playerId;
                     state.isHost = true;
                     state.players = message.players;
+                    state.roomPassword = message.roomPassword || '';
                 state.gameStarted = false;
                 state.currentRound = 0;
                 state.currentDrawer = null;
@@ -1158,13 +1312,22 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.revealedIndices = [];
                     state.wordSelectionDuration = 0;
                     state.wordChoiceTimeLeft = 0;
-                    applyCanvasHistory(message.canvasHistory);
-                    document.getElementById('displayRoomCode').textContent = message.roomCode;
+                    if (Array.isArray(message.canvasHistory)) {
+                        applyCanvasHistory(message.canvasHistory);
+                    } else {
+                        resetDrawingData();
+                    }
+                    updateRoomPasswordDisplay();
                     showScreen('waitingRoomScreen');
                     updateWaitingPlayers();
                     updatePlayersList();
                     updateWordDisplay();
-                    addMessage(`Room created! Code: ${message.roomCode}`, 'system');
+                    addMessage(
+                        state.roomPassword
+                            ? `Room created! ${state.roomPassword}`
+                            : 'Room created! No password.',
+                        'system'
+                    );
                     break;
 
                 case 'room-joined':
@@ -1172,6 +1335,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.roomCode = message.roomCode;
                     state.playerId = message.playerId;
                     state.players = message.players || [];
+                    state.roomPassword = message.roomPassword || '';
                     state.totalRounds = message.settings.numRounds;
                     state.drawTime = message.settings.drawTime;
                     state.maxHints = message.settings.maxHints;
@@ -1201,7 +1365,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     }
                     const canvasHistory = Array.isArray(message.canvasHistory) ? message.canvasHistory : [];
                     applyCanvasHistory(canvasHistory);
-                    document.getElementById('displayRoomCode').textContent = message.roomCode;
+                    updateRoomPasswordDisplay();
 
                     if (state.gameStarted) {
                         showScreen('gameScreen');
@@ -1240,7 +1404,12 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                         state.currentWordLength = 0;
                         state.hintsGiven = 0;
                         updateWordDisplay();
-                        addMessage(`Joined room: ${message.roomCode}`, 'system');
+                        addMessage(
+                            state.roomPassword
+                                ? `Joined room. ${state.roomPassword}`
+                                : 'Joined room. No password.',
+                            'system'
+                        );
                     }
                     break;
 
@@ -1304,10 +1473,11 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                 case 'kicked': {
                     hideKickMenu();
                     const kickerName = message.kickedBy ? ` by ${message.kickedBy}` : '';
-                    alert(`You were kicked${kickerName}. You can rejoin with the room code.`);
+                    alert(`You were kicked${kickerName}. You can rejoin from the lobby list.`);
                     addMessage('You were removed from the room by the host.', 'system');
                     clearInterval(timerInterval);
                     state.roomCode = null;
+                    state.roomPassword = '';
                     state.isHost = false;
                     state.players = [];
                     state.currentDrawer = null;
@@ -1325,7 +1495,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     state.myScore = 0;
                     state.round = 1;
                     state.totalRounds = 3;
-                    state.drawTime = 80;
+                    state.drawTime = 90;
                     state.timeLeft = state.drawTime;
                     state.maxHints = 2;
                     resetDrawingData();
@@ -1336,7 +1506,7 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     setDrawingEnabled(false);
                     hideWordChoices();
                     hideEndGameOverlay();
-                    const roomCodeDisplay = document.getElementById('displayRoomCode'); if (roomCodeDisplay) { roomCodeDisplay.textContent = '------'; }
+                    updateRoomPasswordDisplay();
                     const scoreDisplay = document.getElementById('score');
                     if (scoreDisplay) {
                         scoreDisplay.textContent = '0';
@@ -1582,6 +1752,9 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
 
         // Event listeners
         document.addEventListener('DOMContentLoaded', () => {
+            renderAvailableRooms();
+            updateRoomPasswordDisplay();
+
             // Avatar selection
             const avatarOptions = document.querySelectorAll('.avatar-option');
             avatarOptions.forEach(option => {
@@ -1593,50 +1766,38 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
             });
             
             // Create room
-            document.getElementById('createRoomBtn').addEventListener('click', () => {
-                const playerName = document.getElementById('lobbyPlayerName').value.trim();
-                if (!playerName) {
-                    alert('Please enter your name!');
-                    return;
-                }
-                state.playerName = playerName;
-                
-                if (!isConnected) {
-                    alert('Not connected to server. Please wait...');
-                    return;
-                }
+            const createRoomButton = document.getElementById('createRoomBtn');
+            if (createRoomButton) {
+                createRoomButton.addEventListener('click', () => {
+                    const nameInput = document.getElementById('lobbyPlayerName');
+                    const playerName = normalizeLobbyText(nameInput ? nameInput.value : '', 15);
+                    if (!playerName) {
+                        alert('Please enter your name!');
+                        if (nameInput) {
+                            nameInput.focus();
+                        }
+                        return;
+                    }
+                    state.playerName = playerName;
+                    
+                    if (!isConnected) {
+                        alert('Not connected to server. Please wait...');
+                        return;
+                    }
 
-                showScreen('roomSettingsScreen');
-            });
+                    const titleInput = document.getElementById('roomTitleInput');
+                    if (titleInput) {
+                        titleInput.value = buildDefaultRoomTitle(playerName);
+                    }
 
-            // Join room
-            document.getElementById('joinRoomBtn').addEventListener('click', () => {
-                const playerName = document.getElementById('lobbyPlayerName').value.trim();
-                const roomCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
-                
-                if (!playerName) {
-                    alert('Please enter your name!');
-                    return;
-                }
-                
-                if (!roomCode) {
-                    alert('Please enter a room code!');
-                    return;
-                }
+                    const passwordInput = document.getElementById('roomPasswordInput');
+                    if (passwordInput) {
+                        passwordInput.value = '';
+                    }
 
-                if (!isConnected) {
-                    alert('Not connected to server. Please wait...');
-                    return;
-                }
-
-                state.playerName = playerName;
-                sendMessage({
-                    type: 'join-room',
-                    roomCode: roomCode,
-                    playerName: playerName,
-                    playerColor: state.playerColor
+                    showScreen('roomSettingsScreen');
                 });
-            });
+            }
 
             // Back to lobby
             document.getElementById('backToLobbyBtn').addEventListener('click', () => {
@@ -1645,6 +1806,28 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
 
             // Start game from settings
             document.getElementById('startGameBtn').addEventListener('click', () => {
+                const titleInput = document.getElementById('roomTitleInput');
+                const passwordInput = document.getElementById('roomPasswordInput');
+
+                const roomTitle = normalizeLobbyText(titleInput ? titleInput.value : '', ROOM_TITLE_MAX_LENGTH);
+                const roomPassword = normalizeLobbyText(passwordInput ? passwordInput.value : '', ROOM_PASSWORD_MAX_LENGTH);
+
+                if (!roomTitle) {
+                    alert('Please enter a room title (max 20 characters).');
+                    if (titleInput) {
+                        titleInput.focus();
+                    }
+                    return;
+                }
+
+                if (titleInput) {
+                    titleInput.value = roomTitle;
+                }
+
+                if (passwordInput) {
+                    passwordInput.value = roomPassword;
+                }
+
                 const numRounds = parseInt(document.getElementById('numRounds').value);
                 const drawTime = parseInt(document.getElementById('drawTime').value);
                 const maxHints = parseInt(document.getElementById('maxHints').value);
@@ -1671,6 +1854,8 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     type: 'create-room',
                     playerName: state.playerName,
                     playerColor: state.playerColor,
+                    roomTitle,
+                    roomPassword,
                     settings: {
                         numRounds: numRounds,
                         drawTime: drawTime,
@@ -1697,8 +1882,10 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                 sendMessage({ type: 'leave-room' });
                 showScreen('lobbyScreen');
                 state.roomCode = null;
+                state.roomPassword = '';
                 state.isHost = false;
                 state.players = [];
+                updateRoomPasswordDisplay();
             });
 
             // Connect to server
