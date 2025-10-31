@@ -1701,18 +1701,25 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                     if (message.autoSelected) {
                         addMessage('Time was up! A word was chosen automatically.', 'system');
                     }
-                    state.currentWord = message.word;
-                    state.currentWordLength = message.word.length;
+                    const receivedWord = typeof message.word === 'string' ? message.word : '';
+                    const wordLengthHintRaw = Number(message.wordLength);
+                    const wordLengthHint = Number.isFinite(wordLengthHintRaw) && wordLengthHintRaw > 0 ? wordLengthHintRaw : 0;
+                    const maskTokenCount = getMaskTokenCount(message.mask);
+                    const resolvedWordLength = receivedWord.length > 0
+                        ? receivedWord.length
+                        : (wordLengthHint || maskTokenCount || state.currentWordLength || 0);
+                    state.currentWord = receivedWord;
+                    state.currentWordLength = resolvedWordLength;
                     state.currentMask = (message.mask && message.mask.length)
                         ? message.mask
-                        : createEmptyMask(state.currentWord || state.currentWordLength);
+                        : createEmptyMask(receivedWord.length > 0 ? receivedWord : resolvedWordLength);
                     state.revealedIndices = Array.isArray(message.revealedIndices) ? message.revealedIndices : [];
                     state.hintsGiven = message.hintsGiven || 0;
                     state.guessedCorrectly = state.isMyTurn ? false : state.guessedCorrectly;
                     updateWordDisplay();
                     startTimer(state.drawTime, { resetHints: true });
-                    if (state.isMyTurn) {
-                        addMessage(`Draw: ${message.word}`, 'system');
+                    if (state.isMyTurn && receivedWord.length > 0) {
+                        addMessage(`Draw: ${receivedWord}`, 'system');
                     }
                     break;
 
