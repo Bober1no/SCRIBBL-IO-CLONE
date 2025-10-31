@@ -299,6 +299,8 @@
             padding: 8px;
             border-radius: 5px;
             background: white;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .message.correct {
@@ -311,6 +313,12 @@
             background: #fff3cd;
             color: #856404;
             text-align: center;
+        }
+
+        .message.warning {
+            background: #f8d7da;
+            color: #721c24;
+            font-weight: bold;
         }
 
         .chat-input {
@@ -755,11 +763,14 @@
 
         .player-info {
             flex: 1;
+            min-width: 0;
         }
 
         .player-name {
             font-weight: bold;
             color: #000000;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
 .player-score {

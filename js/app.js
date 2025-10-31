@@ -68,6 +68,73 @@ const SPACE_DISPLAY_GAP = '   ';
 const HYPHEN_CHARS = new Set(['-', '\u2013', '\u2014']);
 const GUESSABLE_CHAR_REGEX_CLIENT = /[A-Za-z0-9]/;
 
+const DEVICE_TOKEN_STORAGE_KEY = 'scribbl_device_token';
+let cachedDeviceToken = null;
+
+function computeDeviceFingerprintSeed() {
+    try {
+        const timezone = (() => {
+            try {
+                return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+            } catch (err) {
+                return '';
+            }
+        })();
+        const components = [
+            navigator.userAgent || '',
+            navigator.platform || '',
+            navigator.language || '',
+            typeof navigator.hardwareConcurrency === 'number' ? navigator.hardwareConcurrency : '',
+            typeof navigator.deviceMemory === 'number' ? navigator.deviceMemory : '',
+            (typeof screen !== 'undefined' && screen) ? `${screen.width}x${screen.height}x${screen.colorDepth}` : '',
+            timezone,
+        ];
+        return components.join('::');
+    } catch (err) {
+        return 'fallback-seed';
+    }
+}
+
+function computeDeterministicHash(input) {
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function getDeviceToken() {
+    if (cachedDeviceToken) {
+        return cachedDeviceToken;
+    }
+
+    let stored = null;
+    try {
+        stored = localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY);
+    } catch (err) {
+        // ignore storage access issues; will fall back to computed token
+    }
+
+    if (stored && typeof stored === 'string' && stored.length > 0) {
+        cachedDeviceToken = stored;
+        return cachedDeviceToken;
+    }
+
+    const seed = computeDeviceFingerprintSeed();
+    const hash = computeDeterministicHash(seed);
+    const token = `pc-${hash}`;
+
+    try {
+        localStorage.setItem(DEVICE_TOKEN_STORAGE_KEY, token);
+    } catch (err) {
+        // ignore storage write issues
+    }
+
+    cachedDeviceToken = token;
+    return cachedDeviceToken;
+}
+
 function buildClientMask(word, revealedIndices, options = {}) {
     if (!word) return '';
     const revealAll = !!options.revealAll;
@@ -1256,6 +1323,12 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
 
         function sendMessage(message) {
             if (ws && ws.readyState === WebSocket.OPEN) {
+                if (message && typeof message === 'object' && !message.deviceToken) {
+                    const deviceToken = getDeviceToken();
+                    if (deviceToken) {
+                        message.deviceToken = deviceToken;
+                    }
+                }
                 ws.send(JSON.stringify(message));
             }
         }
@@ -1329,6 +1402,21 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                         'system'
                     );
                     break;
+
+                case 'room-create-error': {
+                    let alertMessage = 'Unable to create room.';
+                    if (message.reason === 'device-room-limit') {
+                        alertMessage = 'You have reached the limit of 3 rooms on this computer. Please close an existing room before creating another.';
+                    } else if (message.reason === 'device-player-limit') {
+                        alertMessage = 'You already have 3 players active on this computer. Leave a room before creating another.';
+                    } else if (message.reason === 'missing-device-token') {
+                        alertMessage = 'We could not identify this computer. Please refresh the page and try again.';
+                    } else if (typeof message.message === 'string' && message.message.length > 0) {
+                        alertMessage = message.message;
+                    }
+                    alert(alertMessage);
+                    break;
+                }
 
                 case 'room-joined':
                     clearWordChoiceCountdown();
@@ -1634,6 +1722,10 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                 case 'stroke-end':
                 case 'undo':
                     processCanvasEvent(message);
+                    break;
+
+                case 'rate-limit-warning':
+                    addMessage(message.message || 'You are sending messages too quickly.', 'warning');
                     break;
 
                 case 'guess':
