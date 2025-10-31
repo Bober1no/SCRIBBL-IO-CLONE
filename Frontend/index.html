@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scribbl.io Clone</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Connection Status -->
+        <div id="connectionStatus" class="connection-status disconnected" style="display: none;">
+            Connecting to server...
+        </div>
+
+        <!-- Lobby Screen -->
+        <div class="lobby-screen active" id="lobbyScreen">
+            <h1>Scribbl Lobby</h1>
+            <div style="max-width: 400px; margin: 0 auto;">
+                <div class="setting-group">
+                    <label for="lobbyPlayerName">Your Name:</label>
+                    <input type="text" id="lobbyPlayerName" placeholder="Enter your name" value="Player1" maxlength="15">
+                </div>
+                <div class="setting-group">
+                    <label>Choose Your Avatar:</label>
+                    <div class="avatar-selector">
+                        <div class="avatar-option active" data-color="#FF6B6B">A</div>
+                        <div class="avatar-option" data-color="#4ECDC4">B</div>
+                        <div class="avatar-option" data-color="#95E1D3">C</div>
+                        <div class="avatar-option" data-color="#FFD93D">D</div>
+                        <div class="avatar-option" data-color="#A8E6CF">E</div>
+                        <div class="avatar-option" data-color="#FF8B94">F</div>
+                    </div>
+                </div>
+            </div>
+            <p class="lobby-subtitle">Create a room or join an existing one!</p>
+            <button id="createRoomBtn" class="btn btn-primary lobby-create-btn">Create Room</button>
+            <div class="rooms-list" id="roomsList">
+                <div class="rooms-list-empty">No rooms yet. Be the first to create one!</div>
+            </div>
+        </div>
+
+        <!-- Room Settings Screen -->
+        <div class="lobby-screen" id="roomSettingsScreen">
+            <h1>Room Settings</h1>
+            <div class="room-settings">
+                <div class="setting-group">
+                    <label for="roomTitleInput">Room Title:</label>
+                    <input type="text" id="roomTitleInput" placeholder="Enter a room title" maxlength="20">
+                </div>
+
+                <div class="setting-group">
+                    <label for="roomPasswordInput">Room Password (optional):</label>
+                    <input type="text" id="roomPasswordInput" placeholder="Leave blank for no password" maxlength="20">
+                    <small class="input-hint">Spaces only will be treated as no password.</small>
+                </div>
+
+                <div class="setting-group">
+                    <label for="numRounds">Number of Rounds:</label>
+                    <input type="number" id="numRounds" min="1" max="10" value="3">
+                </div>
+                
+                <div class="setting-group">
+                    <label for="drawTime">Draw Time (seconds):</label>
+                    <input type="number" id="drawTime" min="30" max="180" value="90">
+                </div>
+                
+                <div class="setting-group">
+                    <label for="wordChoiceTime">Word Choice Time (seconds):</label>
+                    <input type="number" id="wordChoiceTime" min="5" max="30" value="15">
+                </div>
+                
+                <div class="setting-group">
+                    <label for="maxHints">Maximum Hints:</label>
+                    <input type="number" id="maxHints" min="0" max="5" value="2">
+                </div>
+                
+                <div style="margin-top: 30px; display: flex; gap: 14px;">                   <button id="startGameBtn" class="btn btn-primary">Start Game</button>
+                    <button id="backToLobbyBtn" class="btn btn-outline">Back</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Waiting Room Screen -->
+        <div class="lobby-screen" id="waitingRoomScreen">
+            <h1>Waiting Room</h1>
+            <div class="room-code-display">
+                <h3>Room Password:</h3>
+                <div class="room-code" id="displayRoomPassword">No password</div>
+            </div>
+            <div id="waitingPlayers" style="max-width: 400px; margin: 20px auto;"></div>
+            <div style="margin-top: 30px; display: flex; justify-content: center; gap: 16px;">              <button id="startGameFromWaitingBtn" class="btn btn-primary" style="display: none;">Start Game</button>
+                <button id="leaveRoomBtn" class="btn btn-danger">Leave Room</button>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div class="game-screen hidden" id="gameScreen">
+            <h1>Scribbl.io Clone</h1>
+            
+            <div class="round-info">
+                Round <span id="currentRound">1</span> of <span id="totalRounds">3</span>
+            </div>
+
+            <div class="game-info">
+                <div class="word-display" id="wordDisplay">_ _ _ _ _</div>
+                <div class="timer">Time: <span id="timer">90</span>s</div>
+                <div class="score">Your Score: <span id="score">0</span></div>
+            </div>
+
+            <div class="game-area">
+                <div class="players-panel">
+                    <h3>Players</h3>
+                    <div id="playersList"></div>
+                </div>
+                
+                <div>
+                    <div class="canvas-container">
+                        <canvas id="canvas" width="800" height="600"></canvas>
+                        <div class="drawer-overlay" id="drawerOverlay">
+                            <div class="drawer-overlay-card">
+                                <div class="drawer-overlay-title" id="drawerOverlayTitle">The drawer is choosing</div>
+                                <div class="drawer-overlay-timer" id="drawerOverlayTimer">Time left: 15s</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tools">
+                        <div class="color-picker" id="colorPicker"></div>
+                        <div class="size-control">
+                            <label>Size:</label>
+                            <input type="range" id="brushSize" min="1" max="20" value="3">
+                            <span id="sizeValue">3</span>
+                        </div>
+                        <button class="tool-btn" id="clearBtn">Clear Canvas</button>
+                        <button class="tool-btn" id="undoBtn" disabled>Undo</button>
+                        <button class="tool-btn" id="fillBtn">Fill</button>
+                        <button class="tool-btn" id="eraserBtn">Eraser</button>
+                    </div>
+                </div>
+
+                <div class="chat-panel">
+                    <div class="chat-messages" id="chatMessages"></div>
+                    <div class="chat-input">
+                        <input type="text" id="guessInput" placeholder="Type your guess here...">
+                        <button id="sendBtn" class="btn btn-primary">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="wordSelectOverlay" class="modal-overlay">
+        <div class="modal-card word-modal">
+            <h2 id="wordSelectTitle">Choose a word</h2>
+            <p id="wordSelectSubtitle" class="modal-subtitle">Pick one to start drawing.</p>
+            <div id="wordChoices" class="word-choice-grid"></div>
+        </div>
+    </div>
+
+    <div id="endGameOverlay" class="modal-overlay">
+        <div class="modal-card results-modal">
+            <h2>Final Standings</h2>
+            <p class="modal-subtitle">Great game! Here are the top artists.</p>
+            <div id="endGamePodium" class="podium"></div>
+            <div class="modal-actions">
+                <button id="playAgainBtn" class="btn btn-primary">Back to Lobby</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/canvas.js"></script>
+</body>
+</html>
+
+
+
