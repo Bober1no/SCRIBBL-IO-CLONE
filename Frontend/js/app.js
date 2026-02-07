@@ -1,6 +1,6 @@
 
         // WebSocket connection - CHANGE THIS URL TO YOUR BACKEND SERVER
-        const WS_URL = 'https://lnvidia-1.tailee5ad1.ts.net/' // Change to your deployed backend URL
+        const WS_URL = 'wss://lnvidia.tailee5ad1.ts.net/' // Change to your deployed backend URL
         let ws = null;
         let isConnected = false;
 
@@ -1634,6 +1634,10 @@ window.addEventListener('scroll', hideKickMenu, { passive: true });
                 case 'stroke-end':
                 case 'undo':
                     processCanvasEvent(message);
+                    break;
+
+                case 'rate-limit-warning':
+                    addMessage(message.message || 'You are sending messages too quickly.', 'warning');
                     break;
 
                 case 'guess':
